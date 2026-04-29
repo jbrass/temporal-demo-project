@@ -3,7 +3,7 @@ Temporal Client — Start, Schedule, and Signal Workflows
 
 Run this to:
   python portfolio_trigger.py start          # Single run (now)
-  python portfolio_trigger.py schedule       # Mon-Fri 9:50am ET schedule
+  python portfolio_trigger.py schedule       # Mon-Fri 7:05am PDT schedule
   python portfolio_trigger.py signal-force   # Force rebalance via signal
   python portfolio_trigger.py query-status   # Query workflow state
   python portfolio_trigger.py dry-run        # Simulate without placing orders
@@ -56,7 +56,7 @@ async def start_single_run(dry_run: bool = False):
 
 async def create_schedule():
     """
-    Create a Temporal Schedule that runs the rebalancer Mon-Fri at 9:50 AM ET.
+    Create a Temporal Schedule that runs the rebalancer Mon-Fri at 7:05 AM PDT.
     Temporal Schedules replace cron jobs with durable, observable scheduling.
     """
     client = await Client.connect(os.getenv("TEMPORAL_HOST", "localhost:7233"))
@@ -69,11 +69,11 @@ async def create_schedule():
             task_queue=TASK_QUEUE,
         ),
         spec=ScheduleSpec(
-            # Run Mon-Fri at 14:50 UTC (9:50am ET, near market open)
+            # Run Mon-Fri at 14:05 UTC (7:05am PDT)
             calendars=[
                 ScheduleCalendarSpec(
                     hour=[ScheduleRange(14)],
-                    minute=[ScheduleRange(50)],
+                    minute=[ScheduleRange(5)],
                     day_of_week=[ScheduleRange(1, 5)],  # Mon(1) through Fri(5)
                 ),
             ]
@@ -82,7 +82,7 @@ async def create_schedule():
 
     handle = await client.create_schedule(SCHEDULE_ID, schedule)
     print(f"✅ Schedule created: {SCHEDULE_ID}")
-    print("The rebalancer will run Mon-Fri at 9:50am ET")
+    print("The rebalancer will run Mon-Fri at 7:05am PDT")
     print(f"Manage at: http://localhost:8080/schedules/{SCHEDULE_ID}")
 
 

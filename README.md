@@ -20,7 +20,7 @@ digraph spytlt {
     node  [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor=white]
     edge  [fontname="Helvetica" fontsize=10]
 
-    scheduler    [label="Temporal Scheduler\n(Mon–Fri 10:05 AM ET\nand 4:05 PM ET)" shape=cylinder fillcolor="#dbeafe"]
+    scheduler    [label="Temporal Scheduler\n(Mon–Fri 7:05 AM PDT)" shape=cylinder fillcolor="#dbeafe"]
     alpaca_trade [label="Alpaca Trading API"                                           shape=cylinder fillcolor="#dbeafe"]
     alpaca_data  [label="Alpaca Data API (IEX feed)"                                   shape=cylinder fillcolor="#dbeafe"]
 
@@ -215,9 +215,10 @@ Cloud profile additionally requires `TEMPORAL_CLOUD_HOST`, `TEMPORAL_CLOUD_NAMES
 ```bash
 python portfolio_trigger.py dry-run        # calculate orders but do not place them
 python portfolio_trigger.py start          # single live run
-python portfolio_trigger.py schedule       # create Temporal Schedule (Mon–Fri 10:05 AM + 4:05 PM ET)
-python portfolio_trigger.py signal-force   # send force_rebalance signal to running workflow
-python portfolio_trigger.py query-status   # query get_status
+python portfolio_trigger.py schedule         # create Temporal Schedule (Mon–Fri 7:05 AM PDT)
+python portfolio_trigger.py delete-schedule  # delete the existing schedule
+python portfolio_trigger.py signal-force     # send force_rebalance signal to running workflow
+python portfolio_trigger.py query-status     # query get_status
 ```
 
 ### Crypto (`crypto_trigger.py`)
