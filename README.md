@@ -1,5 +1,7 @@
 # Portfolio Rebalancer — Temporal.io + Alpaca
 
+> **Disclaimer:** This project is for demonstration purposes only and is intended to showcase Temporal.io workflow functionality. It does not constitute financial advice and should not be used as a real investment strategy.
+
 Two portfolio rebalancing workflows built on Temporal.io, both targeting a 60/40 allocation using the Alpaca brokerage API.
 
 | Workflow | Assets | Execution model | Entry points |
