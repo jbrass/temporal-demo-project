@@ -13,152 +13,146 @@ Two portfolio rebalancing workflows built on Temporal.io, both targeting a 60/40
 
 ### SPY/TLT — `PortfolioRebalanceWorkflow`
 
-```dot
-digraph spytlt {
-    rankdir=TB
-    graph [fontname="Helvetica" fontsize=12 pad=0.5]
-    node  [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor=white]
-    edge  [fontname="Helvetica" fontsize=10]
+```mermaid
+flowchart TD
+    scheduler[("Temporal Scheduler<br/>Mon–Fri 7:05 AM PDT")]
+    alpaca_trade[("Alpaca Trading API")]
+    alpaca_data[("Alpaca Data API — IEX")]
 
-    scheduler    [label="Temporal Scheduler\n(Mon–Fri 7:05 AM PDT)" shape=cylinder fillcolor="#dbeafe"]
-    alpaca_trade [label="Alpaca Trading API"                                           shape=cylinder fillcolor="#dbeafe"]
-    alpaca_data  [label="Alpaca Data API (IEX feed)"                                   shape=cylinder fillcolor="#dbeafe"]
+    subgraph signals["Signals"]
+        sig_force["force_rebalance<br/>(bypass drift check)"]
+        sig_config["update_config<br/>(new RebalanceConfig)"]
+    end
 
-    subgraph cluster_signals {
-        label="Signals" style=dashed color="#3b82f6"
-        node [fillcolor="#eff6ff"]
-        sig_force  [label="force_rebalance\n(bypass drift check)"]
-        sig_config [label="update_config\n(new RebalanceConfig)"]
-    }
+    subgraph queries["Queries"]
+        q_status["get_status → {status, last_result, force_pending}"]
+    end
 
-    subgraph cluster_queries {
-        label="Queries" style=dashed color="#16a34a"
-        node [fillcolor="#f0fdf4"]
-        q_status [label="get_status → { status,\nlast_result, force_pending }"]
-    }
+    subgraph wf["PortfolioRebalanceWorkflow · task queue: portfolio-rebalancer"]
+        wf_start(["run(RebalanceConfig)"])
+        act1["get_portfolio_positions<br/>→ PortfolioSnapshot"]
+        act2["get_market_prices<br/>→ {SPY: $x, TLT: $y}"]
+        act3["calculate_rebalance_orders<br/>→ RebalanceResult"]
+        drift{"needs_rebalance OR force_rebalance?"}
+        act4["execute_orders<br/>(one activity per order)"]
+        saga["execute_orders — compensation<br/>(reverse side)"]
+        wf_sleep["workflow.sleep(5s)<br/>durable timer"]
+        act4b["get_portfolio_positions<br/>(post-trade snapshot)"]
+        act5[send_notification]
+        wf_skip(["Return: status = skipped"])
+        wf_done(["Return: RebalanceWorkflowResult"])
+    end
 
-    subgraph cluster_wf {
-        label="PortfolioRebalanceWorkflow  (task queue: portfolio-rebalancer)"
-        style=rounded color="#6b7280"
+    scheduler --> wf_start
+    wf_start --> act1 --> act2 --> act3 --> drift
+    drift -->|no| wf_skip
+    drift -->|yes| act4
+    act4 -.->|"order N fails after N-1 placed"| saga
+    act4 -->|all placed| wf_sleep --> act4b --> act5 --> wf_done
+    saga --> act5
 
-        wf_start [label="run(RebalanceConfig)"                              shape=oval   fillcolor="#d1fae5"]
-        act1     [label="get_portfolio_positions\n→ PortfolioSnapshot"                  fillcolor="#fef9c3"]
-        act2     [label="get_market_prices\n→ { SPY: $x, TLT: $y }"                    fillcolor="#fef9c3"]
-        act3     [label="calculate_rebalance_orders\n→ RebalanceResult"                 fillcolor="#fef9c3"]
-        drift    [label="needs_rebalance\nOR force_rebalance?"             shape=diamond fillcolor="#fee2e2"]
-        act4     [label="execute_orders\n(one activity call per order)"                 fillcolor="#fef9c3"]
-        saga     [label="execute_orders\n(compensating — reverse side)"                 fillcolor="#fecaca" style="rounded,filled,dashed"]
-        wf_sleep [label="workflow.sleep(5s)\n— durable timer"                          fillcolor="#ede9fe"]
-        act4b    [label="get_portfolio_positions\n(post-trade snapshot)"                fillcolor="#fef9c3"]
-        act5     [label="send_notification"                                             fillcolor="#fef9c3"]
-        wf_skip  [label="Return: status=skipped"                           shape=oval   fillcolor="#d1fae5"]
-        wf_done  [label="Return: RebalanceWorkflowResult"                  shape=oval   fillcolor="#d1fae5"]
-    }
+    act1 & act4 & saga & act4b -.-> alpaca_trade
+    act2 -.-> alpaca_data
 
-    scheduler -> wf_start
-    wf_start  -> act1
-    act1      -> act2
-    act2      -> act3
-    act3      -> drift
-    drift     -> wf_skip  [label="no"]
-    drift     -> act4     [label="yes"]
-    act4      -> saga     [label="order N fails\nafter N-1 placed" style=dashed color="#dc2626"]
-    act4      -> wf_sleep [label="all placed"]
-    wf_sleep  -> act4b
-    act4b     -> act5
-    saga      -> act5
-    act5      -> wf_done
+    sig_force -.-> drift
+    sig_config -.-> wf_start
 
-    act1  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    act4  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    saga  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    act4b -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    act2  -> alpaca_data  [style=dashed arrowhead=none color="#9ca3af"]
+    classDef act fill:#fef9c3,stroke:#ca8a04
+    classDef dec fill:#fee2e2,stroke:#dc2626
+    classDef term fill:#d1fae5,stroke:#16a34a
+    classDef tmr fill:#ede9fe,stroke:#7c3aed
+    classDef comp fill:#fecaca,stroke:#dc2626,stroke-dasharray:5 5
+    classDef ext fill:#dbeafe,stroke:#3b82f6
+    classDef sig fill:#eff6ff,stroke:#3b82f6
+    classDef qry fill:#f0fdf4,stroke:#16a34a
 
-    sig_force  -> drift    [style=dashed color="#3b82f6"]
-    sig_config -> wf_start [style=dashed color="#3b82f6"]
-}
+    class act1,act2,act3,act4,act4b,act5 act
+    class drift dec
+    class wf_start,wf_skip,wf_done term
+    class wf_sleep tmr
+    class saga comp
+    class scheduler,alpaca_trade,alpaca_data ext
+    class sig_force,sig_config sig
+    class q_status qry
 ```
 
 ### Crypto — `CryptoRebalanceWorkflow` (perpetual)
 
-```dot
-digraph crypto {
-    rankdir=TB
-    graph [fontname="Helvetica" fontsize=12 pad=0.5]
-    node  [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor=white]
-    edge  [fontname="Helvetica" fontsize=10]
+```mermaid
+flowchart TD
+    alpaca_trade[("Alpaca Trading API")]
+    alpaca_data[("Alpaca Crypto Data")]
 
-    alpaca_trade [label="Alpaca Trading API"  shape=cylinder fillcolor="#dbeafe"]
-    alpaca_data  [label="Alpaca Crypto Data"  shape=cylinder fillcolor="#dbeafe"]
+    subgraph signals["Signals"]
+        sig_force["force_rebalance<br/>(interrupts sleep)"]
+        sig_pause[pause / resume]
+        sig_interval["set_interval(hours)"]
+        sig_config["update_config<br/>(new CryptoRebalanceConfig)"]
+    end
 
-    subgraph cluster_signals {
-        label="Signals" style=dashed color="#3b82f6"
-        node [fillcolor="#eff6ff"]
-        sig_force    [label="force_rebalance\n(interrupts sleep)"]
-        sig_pause    [label="pause / resume"]
-        sig_interval [label="set_interval(hours)"]
-        sig_config   [label="update_config\n(new CryptoRebalanceConfig)"]
-    }
+    subgraph queries["Queries"]
+        q_status["get_status → {status, paused,<br/>cycle_count, total_rebalances, last_rebalance_time, ...}"]
+    end
 
-    subgraph cluster_queries {
-        label="Queries" style=dashed color="#16a34a"
-        node [fillcolor="#f0fdf4"]
-        q_status [label="get_status → { status, paused,\ncycle_count, total_rebalances,\nlast_rebalance_time, ... }"]
-    }
+    subgraph wf["CryptoRebalanceWorkflow · task queue: crypto-rebalancer · perpetual loop"]
+        wf_start(["run(CryptoRebalanceConfig, CryptoWorkflowState?)"])
+        pause_chk{"paused?"}
+        pause_wait["wait_condition(not paused)<br/>timeout = 24 h"]
+        act1["get_crypto_positions<br/>(reads ALPACA_* from env)"]
+        act2["get_crypto_prices<br/>→ {BTC/USD: $x, ETH/USD: $y}"]
+        act3["calculate_crypto_rebalance<br/>→ CryptoRebalanceResult"]
+        drift{"needs_rebalance OR force_rebalance?"}
+        act4["execute_crypto_orders<br/>(one activity per order)"]
+        saga["execute_crypto_orders<br/>(compensation)"]
+        act5[send_crypto_notification]
+        can_chk{"cycle_count >= 200?"}
+        wf_can(["workflow.continue_as_new<br/>(config, CryptoWorkflowState)"])
+        wf_sleep["wait_condition(force_rebalance)<br/>timeout = interval_hours<br/>durable timer — interruptible"]
+        loop_back(["cycle_count += 1"])
+    end
 
-    subgraph cluster_wf {
-        label="CryptoRebalanceWorkflow  (task queue: crypto-rebalancer)  —  perpetual loop"
-        style=rounded color="#6b7280"
+    wf_start --> pause_chk
+    pause_chk -->|yes| pause_wait -->|resumed| act1
+    pause_chk -->|no| act1
+    act1 --> act2 --> act3 --> drift
+    drift -->|no| can_chk
+    drift -->|yes| act4
+    act4 -.->|"order N fails after N-1 placed"| saga
+    act4 -->|all placed| act5
+    saga --> act5 --> can_chk
+    can_chk -->|"yes — reset event history"| wf_can
+    can_chk -->|no| wf_sleep
+    wf_sleep -->|"elapsed or force_rebalance"| loop_back
+    loop_back --> pause_chk
 
-        wf_start   [label="run(CryptoRebalanceConfig,\nCryptoWorkflowState?)"         shape=oval   fillcolor="#d1fae5"]
-        pause_chk  [label="paused?"                                                   shape=diamond fillcolor="#fee2e2"]
-        pause_wait [label="wait_condition(!paused,\ntimeout=24h)"                                  fillcolor="#ede9fe"]
-        act1       [label="get_crypto_positions\n(reads ALPACA_* from os.environ)"                fillcolor="#fef9c3"]
-        act2       [label="get_crypto_prices\n→ { BTC/USD: $x, ETH/USD: $y }"                    fillcolor="#fef9c3"]
-        act3       [label="calculate_crypto_rebalance\n→ CryptoRebalanceResult"                   fillcolor="#fef9c3"]
-        drift      [label="needs_rebalance\nOR force_rebalance?"                     shape=diamond fillcolor="#fee2e2"]
-        act4       [label="execute_crypto_orders\n(one activity call per order)"                   fillcolor="#fef9c3"]
-        saga       [label="execute_crypto_orders\n(compensation)"                                  fillcolor="#fecaca" style="rounded,filled,dashed"]
-        act5       [label="send_crypto_notification"                                               fillcolor="#fef9c3"]
-        can_chk    [label="cycle_count >= 200?"                                      shape=diamond fillcolor="#fee2e2"]
-        wf_can     [label="workflow.continue_as_new\n(config, CryptoWorkflowState)"  shape=oval   fillcolor="#fde68a"]
-        wf_sleep   [label="wait_condition(force_rebalance,\ntimeout=interval_hours)\n— durable timer, interruptible" fillcolor="#ede9fe"]
-        loop_back  [label="cycle_count += 1"                                          shape=oval   fillcolor="#d1fae5"]
-    }
+    act1 & act4 & saga -.-> alpaca_trade
+    act2 -.-> alpaca_data
 
-    wf_start   -> pause_chk
-    pause_chk  -> pause_wait [label="yes"]
-    pause_chk  -> act1       [label="no"]
-    pause_wait -> act1       [label="resumed"]
-    act1       -> act2
-    act2       -> act3
-    act3       -> drift
-    drift      -> can_chk    [label="no"]
-    drift      -> act4       [label="yes"]
-    act4       -> saga       [label="order N fails\nafter N-1 placed" style=dashed color="#dc2626"]
-    act4       -> act5       [label="all placed"]
-    saga       -> act5
-    act5       -> can_chk
-    can_chk    -> wf_can     [label="yes — reset\nevent history"]
-    can_chk    -> wf_sleep   [label="no"]
-    wf_sleep   -> loop_back  [label="elapsed or\nforce_rebalance signal"]
-    loop_back  -> pause_chk  [constraint=false]
+    sig_force -.-> wf_sleep
+    sig_pause -.-> pause_chk
+    sig_interval -.-> wf_sleep
+    sig_config -.-> wf_start
 
-    act1  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    act4  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    saga  -> alpaca_trade [style=dashed arrowhead=none color="#9ca3af"]
-    act2  -> alpaca_data  [style=dashed arrowhead=none color="#9ca3af"]
+    classDef act fill:#fef9c3,stroke:#ca8a04
+    classDef dec fill:#fee2e2,stroke:#dc2626
+    classDef term fill:#d1fae5,stroke:#16a34a
+    classDef tmr fill:#ede9fe,stroke:#7c3aed
+    classDef comp fill:#fecaca,stroke:#dc2626,stroke-dasharray:5 5
+    classDef ext fill:#dbeafe,stroke:#3b82f6
+    classDef sig fill:#eff6ff,stroke:#3b82f6
+    classDef qry fill:#f0fdf4,stroke:#16a34a
+    classDef can fill:#fde68a,stroke:#d97706
 
-    sig_force    -> wf_sleep  [style=dashed color="#3b82f6"]
-    sig_pause    -> pause_chk [style=dashed color="#3b82f6"]
-    sig_interval -> wf_sleep  [style=dashed color="#3b82f6"]
-    sig_config   -> wf_start  [style=dashed color="#3b82f6"]
-}
+    class act1,act2,act3,act4,act5 act
+    class pause_chk,drift,can_chk dec
+    class wf_start,loop_back term
+    class wf_sleep,pause_wait tmr
+    class saga comp
+    class alpaca_trade,alpaca_data ext
+    class sig_force,sig_pause,sig_interval,sig_config sig
+    class q_status qry
+    class wf_can can
 ```
-
-> Render with `dot -Tsvg <file.dot> -o diagram.svg` (Graphviz), or paste into
-> [Graphviz Online](https://dreampuf.github.io/GraphvizOnline/).
 
 ---
 
