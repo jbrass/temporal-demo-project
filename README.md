@@ -158,7 +158,7 @@ flowchart TD
 
 ## Setup
 
-**Prerequisites:** Python 3.12+, an [Alpaca paper trading account](https://alpaca.markets), and a running Temporal server (`brew install temporal && temporal server start-dev` — UI at http://localhost:8080).
+**Prerequisites:** Python 3.12+, an [Alpaca paper trading account](https://alpaca.markets), and a running Temporal server (`brew install temporal && temporal server start-dev` — UI at http://localhost:8233).
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -189,16 +189,6 @@ python crypto_worker.py
 `TEMPORAL_HOST` defaults to `localhost:7233`; `TEMPORAL_NAMESPACE` defaults to `default`.
 
 For Temporal Cloud, set `TEMPORAL_TLS_CERT` and `TEMPORAL_TLS_KEY` before starting `crypto_worker.py`.
-
-### Docker
-
-```bash
-docker-compose up                   # both workers (local Temporal)
-docker-compose up crypto-worker     # crypto worker only
-docker-compose --profile cloud up   # both workers against Temporal Cloud
-```
-
-Cloud profile additionally requires `TEMPORAL_CLOUD_HOST`, `TEMPORAL_CLOUD_NAMESPACE`, and a cert directory at `TEMPORAL_CERT_DIR` (containing `client.pem` + `client.key`).
 
 ---
 

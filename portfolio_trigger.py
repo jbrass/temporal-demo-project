@@ -83,7 +83,7 @@ async def create_schedule():
     handle = await client.create_schedule(SCHEDULE_ID, schedule)
     print(f"✅ Schedule created: {SCHEDULE_ID}")
     print("The rebalancer will run Mon-Fri at 7:05am PDT")
-    print(f"Manage at: http://localhost:8080/schedules/{SCHEDULE_ID}")
+    print(f"Manage at: http://localhost:8233/schedules/{SCHEDULE_ID}")
 
 
 async def delete_schedule():
