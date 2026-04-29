@@ -3,10 +3,11 @@ Temporal Client — Start, Schedule, and Signal Workflows
 
 Run this to:
   python portfolio_trigger.py start          # Single run (now)
-  python portfolio_trigger.py schedule       # Mon-Fri 10:05am + 4:05pm ET schedule
+  python portfolio_trigger.py schedule       # Mon-Fri 9:50am ET schedule
   python portfolio_trigger.py signal-force   # Force rebalance via signal
   python portfolio_trigger.py query-status   # Query workflow state
   python portfolio_trigger.py dry-run        # Simulate without placing orders
+  python portfolio_trigger.py delete-schedule # Delete the existing schedule
 """
 
 import asyncio
@@ -55,12 +56,11 @@ async def start_single_run(dry_run: bool = False):
 
 async def create_schedule():
     """
-    Create a Temporal Schedule that runs the rebalancer daily at 4:05 PM ET.
+    Create a Temporal Schedule that runs the rebalancer Mon-Fri at 9:50 AM ET.
     Temporal Schedules replace cron jobs with durable, observable scheduling.
     """
     client = await Client.connect(os.getenv("TEMPORAL_HOST", "localhost:7233"))
 
-    # 4:05 PM UTC-5 = 21:05 UTC (adjust for daylight saving as needed)
     schedule = Schedule(
         action=ScheduleActionStartWorkflow(
             PortfolioRebalanceWorkflow.run,
@@ -69,16 +69,11 @@ async def create_schedule():
             task_queue=TASK_QUEUE,
         ),
         spec=ScheduleSpec(
-            # Run Mon-Fri at 15:05 UTC (10:05am ET, near open) and 21:05 UTC (4:05pm ET, market close)
+            # Run Mon-Fri at 14:50 UTC (9:50am ET, near market open)
             calendars=[
                 ScheduleCalendarSpec(
-                    hour=[ScheduleRange(15)],
-                    minute=[ScheduleRange(5)],
-                    day_of_week=[ScheduleRange(1, 5)],  # Mon(1) through Fri(5)
-                ),
-                ScheduleCalendarSpec(
-                    hour=[ScheduleRange(21)],
-                    minute=[ScheduleRange(5)],
+                    hour=[ScheduleRange(14)],
+                    minute=[ScheduleRange(50)],
                     day_of_week=[ScheduleRange(1, 5)],  # Mon(1) through Fri(5)
                 ),
             ]
@@ -87,8 +82,17 @@ async def create_schedule():
 
     handle = await client.create_schedule(SCHEDULE_ID, schedule)
     print(f"✅ Schedule created: {SCHEDULE_ID}")
-    print("The rebalancer will run Mon-Fri at 10:05am ET (open) and 4:05pm ET (close)")
+    print("The rebalancer will run Mon-Fri at 9:50am ET")
     print(f"Manage at: http://localhost:8080/schedules/{SCHEDULE_ID}")
+
+
+async def delete_schedule():
+    """Delete the existing schedule so it can be recreated with new settings."""
+    client = await Client.connect(os.getenv("TEMPORAL_HOST", "localhost:7233"))
+    handle = client.get_schedule_handle(SCHEDULE_ID)
+    await handle.delete()
+    print(f"✅ Schedule deleted: {SCHEDULE_ID}")
+    print("Run 'python portfolio_trigger.py schedule' to recreate it.")
 
 
 async def signal_force_rebalance():
@@ -114,7 +118,8 @@ if __name__ == "__main__":
     commands = {
         "start":        lambda: start_single_run(dry_run=False),
         "dry-run":      lambda: start_single_run(dry_run=True),
-        "schedule":     create_schedule,
+        "schedule":         create_schedule,
+        "delete-schedule":  delete_schedule,
         "signal-force": signal_force_rebalance,
         "query-status": query_status,
     }
