@@ -38,7 +38,7 @@ with workflow.unsafe.imports_passed_through():
 class RebalanceConfig:
     target_equity_pct: float = 0.60   # SPY target weight
     target_bond_pct: float = 0.40     # TLT target weight
-    drift_threshold: float = 0.05     # rebalance if any weight drifts > 5%
+    drift_threshold: float = 0.01     # rebalance if any weight drifts > 5%
     dry_run: bool = False              # if True, calculate but don't execute
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
 
@@ -171,17 +171,22 @@ class PortfolioRebalanceWorkflow:
         # ----------------------------------------------------------------
         # Step 3: Calculate rebalance orders (pure business logic)
         # ----------------------------------------------------------------
+        # Capture force flag now — if True, pass threshold=0 so the activity
+        # always generates orders regardless of drift magnitude.
+        force_triggered = self._force_rebalance
+        self._force_rebalance = False
+        effective_threshold = 0.0 if force_triggered else effective_config.drift_threshold
+
         rebalance: RebalanceResult = await workflow.execute_activity(
             calculate_rebalance_orders,
-            args=[snapshot, prices, effective_config.target_equity_pct, effective_config.target_bond_pct, effective_config.drift_threshold],
+            args=[snapshot, prices, effective_config.target_equity_pct, effective_config.target_bond_pct, effective_threshold],
             **activity_opts,
         )
 
         # ----------------------------------------------------------------
         # Step 4: Check drift threshold (or honor force signal)
         # ----------------------------------------------------------------
-        needs_rebalance = rebalance.needs_rebalance or self._force_rebalance
-        self._force_rebalance = False  # reset signal flag
+        needs_rebalance = rebalance.needs_rebalance or force_triggered
 
         if not needs_rebalance:
             workflow.logger.info(

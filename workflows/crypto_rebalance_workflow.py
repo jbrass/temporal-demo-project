@@ -37,7 +37,7 @@ MAX_CYCLES_BEFORE_RESET = 200
 class CryptoRebalanceConfig:
     target_btc_pct: float = 0.60
     target_eth_pct: float = 0.40
-    drift_threshold: float = 0.05
+    drift_threshold: float = 0.005
     interval_hours: float = 2.0       # sleep between cycles
     dry_run: bool = False
     alpaca_base_url: str = "https://paper-api.alpaca.markets"

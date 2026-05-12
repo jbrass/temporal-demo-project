@@ -96,11 +96,16 @@ async def delete_schedule():
 
 
 async def signal_force_rebalance():
-    """Send a signal to an existing workflow to force immediate rebalancing."""
+    """Start workflow if not running, then deliver force_rebalance signal (signal-with-start)."""
     client = await Client.connect(os.getenv("TEMPORAL_HOST", "localhost:7233"))
-    handle = client.get_workflow_handle(WORKFLOW_ID)
-    await handle.signal(PortfolioRebalanceWorkflow.force_rebalance)
-    print(f"✅ Sent force_rebalance signal to {WORKFLOW_ID}")
+    handle = await client.start_workflow(
+        PortfolioRebalanceWorkflow.run,
+        get_config(),
+        id=WORKFLOW_ID,
+        task_queue=TASK_QUEUE,
+        start_signal="force_rebalance",
+    )
+    print(f"✅ Sent force_rebalance signal to {WORKFLOW_ID} (run: {handle.result_run_id})")
 
 
 async def query_status():
